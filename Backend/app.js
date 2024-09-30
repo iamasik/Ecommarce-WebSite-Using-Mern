@@ -11,7 +11,9 @@ dotenv.config({path:"Backend/Config/config.env"})
 import DabaseConnect from './Config/DBConnect.js'
 DabaseConnect()
 
-
+//Use Product Router
+import ProductRoute from './Route/Products.js'
+app.use("/Api/V1", ProductRoute)
 
 app.listen(process.env.PORT,()=>{
     console.log(`Server started at ${process.env.PORT}`);
