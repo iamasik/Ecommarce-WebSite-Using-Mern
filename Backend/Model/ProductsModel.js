@@ -7,7 +7,8 @@ const ProductsModel=new mongoose.Schema({
     },
     price:{
         type:Number,
-        reqired:[true, "Please insert product price"]
+        required: [true, "Please insert product price"],
+        message:"Insert numbers as  a value"
     },
     description:{
         type:String,

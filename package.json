@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node Backend/app.js",
     "dev": "SET NODE_ENV=Development& nodemon Backend/app.js",
-    "Prod": "SET NODE_ENV=Production& nodemon Backend/app.js",
+    "prod": "SET NODE_ENV=Production& nodemon Backend/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "DH Asik",
