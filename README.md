@@ -4,7 +4,7 @@
 ## Search
 
 Utils>ProductsFilter.js
-This ProductsFilter class will take the Model and Query search string (Where we will get the search keyword) and search function modify the Model for later use. And return the wntire class using => this
+This ProductsFilter class will take the Model and Query search string (Where we will get the search keyword) and search function modify the Model for later use. And return the entire class using => this
 
 Using $regex will help to search over the database (it's a mongodb functionality) and using $option we can make it case insensitive. And if no keyword then we can simply pass eampty object.
 ```javascript
