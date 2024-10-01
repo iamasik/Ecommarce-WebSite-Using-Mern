@@ -1,195 +1,164 @@
 
-# Error Handing
+# Search | Filter | Pagunation
 
-Complete process of error anding.
+## Search
 
-## Step 1 
-Use one central Error throw:
+Utils>ProductsFilter.js
+This ProductsFilter class will take the Model and Query search string (Where we will get the search keyword) and search function modify the Model for later use. And return the wntire class using => this
 
-Utils>ErrorHandle.js
-```bash
-class ErrorHandle extends Error{
-    constructor(message,statuscode){
-        super(message)
-        this.statusCode=statuscode
-
-        Error.captureStackTrace(this, this.constructor)
-    }
-}
-export default ErrorHandle
-```
-## Step 2
-
-Import that central error and use on controllers
-
+Using $regex will help to search over the database (it's a mongodb functionality) and using $option we can make it case insensitive. And if no keyword then we can simply pass eampty object.
 ```javascript
-import ErrorHandle from "../Utils/ErrorHandle.js"; //Import it
-
-export const DeleteProduct=async (req,res,next)=>{
-    const Product= await ProductsModel.findById(req?.params?.id)
-    if(!Product){
-        return next(new ErrorHandle("Product Not FOunt",400)) //Use it
-    }
-    await Product.deleteOne()
-    res.status(200).json({
-        message: "Product Deleted"
-    })
-}
-```
-
-## Step 3
-Get that central error and show error messages
-Midleware>Error.js
-
-```javascript
-const ErrorMessage=(err,req,res,next)=>{
-    let error={
-        message:err.message,
-        statuscode:err.statuscode || 404
+class ProductsFilter {
+    constructor(QueryProductsModel, QueryStr) {
+      this.QueryProductsModel = QueryProductsModel;
+      this.QueryStr = QueryStr;
     }
 
-    if(process.env.NODE_ENV==="Development"){
-        res.status(error.statuscode).json({
-            error:error.message,
-            statuscode:error.statuscode,
-            stack:err?.stack
-        })
-    }
-}
-export default ErrorMessage
-```
-## Step 4
-
-import and use that show message at the end of the app.js
-
-```javascript
-//Handing error and show message 
-app.use(ErrorMessage)
-```
-
-## Step 5 (If any product id is invalid) = Global error handling
-
-Utilis>catchAsyncError.js.js
-
-import and use that show message at the end of the app.js
-
-```javascript
-export default (controllerFunction)=> (req,res,next)=>Promise.resolve(controllerFunction(req,res,next)).catch(next)
-```
-Here "controllerFunction" is a peparameter which is entire wrapping function from controller. 
-
-```javascript
-export const DeleteProduct=catchAsyncError(async (req,res,next)=>{
-    const Product= await ProductsModel.findById(req?.params?.id)
-    if(!Product){
-        return next(new ErrorHandle("Product Not FOunt",400))
-    }
-    await Product.deleteOne()
-    res.status(200).json({
-        message: "Product Deleted"
-    })
-})
-```
-
-Then this Promise.resolve(controllerFunction(req,res,next)) will try to reslove it.  If it's failed to solve it then catch(next) will catch the error and send it to next step. Which is SHow error message midleware.
-
-Now update the middleware Error to get that "CastError" and handle with "Central Error handler". 
-
-Also show error for "Development" and "Production"
-
-```javascript
-import ErrorHandle from "../Utils/ErrorHandle.js";
-const ErrorMessage=(err,req,res,next)=>{
-    let error={
-        message:err.message,
-        statuscode:err.statuscode || 404
-    }
-    if (err.name === "CastError") {
-        const message = `Resource not found. Invalid: ${err?.path}`;
-        error = new ErrorHandle(message, 404);
-      }
-    if(process.env.NODE_ENV==="Development"){
-        res.status(error.statuscode).json({
-            error:error.message,
-            statuscode:error.statuscode,
-            stack:err?.stack
-        })
-    }
-    if(process.env.NODE_ENV==="Production"){
-        res.status(error.statuscode).json({
-            error:error.message
-        })
-    }
-}
-export default ErrorMessage
-```
-
-## Step 6 (Some Database related Error Handle)
-
-```javascript
-import ErrorHandle from "../Utils/ErrorHandle.js";
-const ErrorMessage=(err,req,res,next)=>{
+    search() {
+    const keyword=this.QueryStr.keyword? {name:{$regex:this.QueryStr.keyword, $options:"i"}}:{}
+    this.QueryProductsModel=this.QueryProductsModel.find({...keyword})
     
-    let error={
-        statusCode: err?.statusCode || 400,
-        message: err?.message || "Internal Server Error",
-      };
-
-      //If mongodb id not valid
-    if (err.name === "CastError") {
-        const message = `Resource not found. Invalid: ${err?.path}`;
-        error = new ErrorHandle(message, 404);
-      }
-
-    // ValidationError
-    if (err.name === "ValidationError") {
-        const message = Object.values(err?.errors).map(item=>item?.message).join(',') || "Please input correct info"
-        
-        error = new ErrorHandle(message, 404);
-      }
-
-    if(process.env.NODE_ENV==="Development"){
-        res.status(error.statusCode).json({
-            message: error.message,
-            error: err,
-            stack: err?.stack,
-          })
-    }
-
-    if(process.env.NODE_ENV==="Production"){
-        res.status(error.statusCode).json({
-            error:error.message
-        })
-    }
+    return this
 }
-export default ErrorMessage
+}
 ```
+->ProductsCon.js
 
-## Step 7 (uncaughtException)
-app.js
-
-Define it at the top to find uncaughtException error such as Variable not define 
-
+Here after making the instanse simply caller the Search function
 ```javascript
-process.on("uncaughtException",(err)=>{
-    console.log(`ERROR: ${err}`);
-    console.log("Shutting down due to uncaught expection");
-    process.exit(1)
+export const FindProduct=catchAsyncError(async(req,res)=>{
+    let useForFilter=new ProductsFilter(ProductsModel,req.query).search()
+
+    let Products=await useForFilter.QueryProductsModel
+    
+    res.status(200).json(
+        {
+            Total:Products.length,
+            Data:Products,
+            message:"Success"
+        }
+    )
 })
 ```
-
-## Step 8 (unhandled Rejection)
-
-app.js
-
-Define it at the bottom to find unhandled Rejection error such as MongoDB url Error 
+## Search + Filter
+Utils>ProductsFilter.js
+In mongodb we can filter by using ``` $gte``` stand for gater than and equal (in the same way lt, lte, gt) when we read from queary => price[gte]=200 it stands for in mongodb price:{gte:200} but we need it in ``` $gte:200``` this format with "$" sing. Fo this need use this regex to match => /\b(gt|gte|lt|lte)\b/g
 
 ```javascript
-process.on("unhandledRejection",(err)=>{
-    console.log(`ERROR: ${err}`);
-    console.log("Shutting down server due to Unhandled Promise Rejection");
-    server.close(()=>{
-        process.exit(1)
-    })
+class ProductsFilter {
+    constructor(QueryProductsModel, QueryStr) {
+      this.QueryProductsModel = QueryProductsModel;
+      this.QueryStr = QueryStr;
+    }
+  
+    search() {
+        
+        const keyword=this.QueryStr.keyword? {name:{$regex:this.QueryStr.keyword, $options:"i"}}:{}
+        this.QueryProductsModel=this.QueryProductsModel.find({...keyword})
+        
+        return this
+    }
+    filters() {
+
+        //Remove Search keyword and page value while filter, since those works are done above
+        let QueryStrCopy={...this.QueryStr}
+        const fieldsToRemove = ["keyword", "page"]
+        fieldsToRemove.forEach(el=> delete QueryStrCopy[el])
+
+        // Advance filter for price, ratings etc to add "$" sing
+        QueryStrCopy = JSON.stringify(QueryStrCopy);
+        QueryStrCopy = QueryStrCopy.replace(/\b(gt|gte|lt|lte)\b/g, (match) => `$${match}`);
+        QueryStrCopy=JSON.parse(QueryStrCopy)
+        
+        this.QueryProductsModel=this.QueryProductsModel.find(QueryStrCopy)
+        
+        return this
+    }
+```
+-> ProductsCon.js
+```javascript
+export const FindProduct=catchAsyncError(async(req,res)=>{
+    //Reminder: filters() working over the fetch data and search() working over the database
+    let useForFilter=new ProductsFilter(ProductsModel,req.query).search().filters()
+
+    //If no pagination
+    let Products = await useForFilter.QueryProductsModel
+
+    res.status(200).json(
+        {
+            Total:Products.length,
+            Data:Products,
+            message:"Success"
+        }
+    )
+})
+```
+## Search + Filter + Pagination
+
+Utils>ProductsFilter.js
+```javascript
+class ProductsFilter {
+    constructor(QueryProductsModel, QueryStr) {
+      this.QueryProductsModel = QueryProductsModel;
+      this.QueryStr = QueryStr;
+    }
+  
+    search() {
+        
+        const keyword=this.QueryStr.keyword? {name:{$regex:this.QueryStr.keyword, $options:"i"}}:{}
+        this.QueryProductsModel=this.QueryProductsModel.find({...keyword})
+        
+        return this
+    }
+    filters() {
+
+        //Remove Search keyword and page value while filter
+        let QueryStrCopy={...this.QueryStr}
+        const fieldsToRemove = ["keyword", "page"]
+        fieldsToRemove.forEach(el=> delete QueryStrCopy[el])
+
+        // Advance filter for price, ratings etc
+        QueryStrCopy = JSON.stringify(QueryStrCopy);
+        //if no filter value still it will not occure any side effect
+        QueryStrCopy = QueryStrCopy.replace(/\b(gt|gte|lt|lte)\b/g, (match) => `$${match}`);        
+        QueryStrCopy=JSON.parse(QueryStrCopy)
+        
+        this.QueryProductsModel=this.QueryProductsModel.find(QueryStrCopy)
+        
+        return this
+    }
+    pagination(numOfItems){
+        const whichPage=Number(this.QueryStr.page) || 1
+        
+        const showItemsNum=numOfItems*(whichPage-1)
+        this.QueryProductsModel=this.QueryProductsModel.limit(numOfItems).skip(showItemsNum)
+
+        return this
+    }
+}
+
+export default ProductsFilter
+```
+-> ProductsCon.js
+```javascript
+export const FindProduct=catchAsyncError(async(req,res)=>{
+    //Reminder: filters() working over the fetch data and search() working over the database
+    let useForFilter=new ProductsFilter(ProductsModel,req.query).search().filters()
+
+    // If no pagination
+    // let Products = await useForFilter.QueryProductsModel
+
+    //If pagination
+    const numOfItems=4
+    useForFilter.pagination(numOfItems)
+    let Products=await useForFilter.QueryProductsModel
+    
+    res.status(200).json(
+        {
+            Total:Products.length,
+            Data:Products,
+            message:"Success"
+        }
+    )
 })
 ```

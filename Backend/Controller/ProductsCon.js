@@ -1,6 +1,28 @@
 import ProductsModel from "../Model/ProductsModel.js";
 import ErrorHandle from "../Utils/ErrorHandle.js";
 import catchAsyncError from "../Utils/catchAsyncError.js";
+import ProductsFilter from "../Utils/ProductsFilter.js";
+
+export const FindProduct=catchAsyncError(async(req,res)=>{
+    //Reminder: filters() working over the fetch data and search() working over the database
+    let useForFilter=new ProductsFilter(ProductsModel,req.query).search().filters()
+
+    // If no pagination
+    // let Products = await useForFilter.QueryProductsModel
+
+    //If pagination
+    const numOfItems=4
+    useForFilter.pagination(numOfItems)
+    let Products=await useForFilter.QueryProductsModel
+    
+    res.status(200).json(
+        {
+            Total:Products.length,
+            Data:Products,
+            message:"Success"
+        }
+    )
+})
 
 export const ViewProducts=catchAsyncError(
     async (req,res)=>{
