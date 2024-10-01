@@ -1,5 +1,5 @@
 
-# Search | Filter | Pagunation
+# Search | Filter | Pagination
 
 ## Search
 
