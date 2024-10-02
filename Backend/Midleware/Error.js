@@ -15,8 +15,7 @@ const ErrorMessage=(err,req,res,next)=>{
     // ValidationError
     if (err.name === "ValidationError") {
         const message = Object.values(err?.errors).map(item=>item?.message).join(',') || "Please input correct info"
-        
-        error = new ErrorHandle(message, 404);
+        error = new ErrorHandle(message, 400);
       }
 
     if(process.env.NODE_ENV==="Development"){

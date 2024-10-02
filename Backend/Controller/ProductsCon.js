@@ -3,7 +3,7 @@ import ErrorHandle from "../Utils/ErrorHandle.js";
 import catchAsyncError from "../Utils/catchAsyncError.js";
 import ProductsFilter from "../Utils/ProductsFilter.js";
 
-export const FindProduct=catchAsyncError(async(req,res)=>{
+export const FindProduct=catchAsyncError(async(req,res,next)=>{
     //Reminder: filters() working over the fetch data and search() working over the database
     let useForFilter=new ProductsFilter(ProductsModel,req.query).search().filters()
 
@@ -25,7 +25,7 @@ export const FindProduct=catchAsyncError(async(req,res)=>{
 })
 
 export const ViewProducts=catchAsyncError(
-    async (req,res)=>{
+    async (req,res, next)=>{
         const Products=await ProductsModel.find()
         if(!Products){
             return next(new ErrorHandle("No products are there",400))
@@ -36,7 +36,7 @@ export const ViewProducts=catchAsyncError(
     }
 )
 export const AddProducts=catchAsyncError(
-    async (req,res)=>{
+    async (req,res, next)=>{
         const Products=await ProductsModel.create(req.body)
         if(!Products){
             return next(new ErrorHandle("Product Add failed", 400))
@@ -58,7 +58,7 @@ export const DeleteProduct=catchAsyncError(async (req,res,next)=>{
     })
 })
 
-export const ViewOneProduct=catchAsyncError(async (req,res)=>{
+export const ViewOneProduct=catchAsyncError(async (req,res,next)=>{
     const Product=await ProductsModel.findById(req.params.id)
     if(!Product){
         return next(new ErrorHandle("Can't find the product",400))
@@ -68,7 +68,7 @@ export const ViewOneProduct=catchAsyncError(async (req,res)=>{
     })
 })
 
-export const UpdateProduct=catchAsyncError(async (req, res)=>{
+export const UpdateProduct=catchAsyncError(async (req, res,next)=>{
     const Product=await ProductsModel.findByIdAndUpdate(req.params.id,req.body,{new:true})
     if(!Product){
         return next(new ErrorHandle("Can't update the product info", 400))

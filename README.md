@@ -1,164 +1,119 @@
 
-# Search | Filter | Pagination
+# Authentication | Password Hashing | JWT Token | Cookie
 
-## Search
+## Singup and Password hasing using bcrypt
 
-Utils>ProductsFilter.js
-This ProductsFilter class will take the Model and Query search string (Where we will get the search keyword) and search function modify the Model for later use. And return the wntire class using => this
+Controller>UserCon.js
 
-Using $regex will help to search over the database (it's a mongodb functionality) and using $option we can make it case insensitive. And if no keyword then we can simply pass eampty object.
 ```javascript
-class ProductsFilter {
-    constructor(QueryProductsModel, QueryStr) {
-      this.QueryProductsModel = QueryProductsModel;
-      this.QueryStr = QueryStr;
+export const AddUser=catchAsyncError(async(req,res,next)=>{
+    const {name, email, password }=req.body
+    const info=await UserModel.create({name, email, password})
+    
+    if(!info){
+        return next(new ErrorHandle("Something is wrong.", 400))
     }
 
-    search() {
-    const keyword=this.QueryStr.keyword? {name:{$regex:this.QueryStr.keyword, $options:"i"}}:{}
-    this.QueryProductsModel=this.QueryProductsModel.find({...keyword})
-    
-    return this
-}
-}
-```
-->ProductsCon.js
-
-Here after making the instanse simply caller the Search function
-```javascript
-export const FindProduct=catchAsyncError(async(req,res)=>{
-    let useForFilter=new ProductsFilter(ProductsModel,req.query).search()
-
-    let Products=await useForFilter.QueryProductsModel
-    
-    res.status(200).json(
-        {
-            Total:Products.length,
-            Data:Products,
-            message:"Success"
-        }
-    )
+    res.status(201).json({
+        message:"Sucess"
+    })
 })
 ```
-## Search + Filter
-Utils>ProductsFilter.js
-In mongodb we can filter by using ``` $gte``` stand for gater than and equal (in the same way lt, lte, gt) when we read from queary => price[gte]=200 it stands for in mongodb price:{gte:200} but we need it in ``` $gte:200``` this format with "$" sing. Fo this need use this regex to match => /\b(gt|gte|lt|lte)\b/g
+Model>UserModel.js
 
 ```javascript
-class ProductsFilter {
-    constructor(QueryProductsModel, QueryStr) {
-      this.QueryProductsModel = QueryProductsModel;
-      this.QueryStr = QueryStr;
+UserModel.pre("save", async function(next){
+    if(!this.isModified("password")){
+        next()
     }
-  
-    search() {
-        
-        const keyword=this.QueryStr.keyword? {name:{$regex:this.QueryStr.keyword, $options:"i"}}:{}
-        this.QueryProductsModel=this.QueryProductsModel.find({...keyword})
-        
-        return this
-    }
-    filters() {
-
-        //Remove Search keyword and page value while filter, since those works are done above
-        let QueryStrCopy={...this.QueryStr}
-        const fieldsToRemove = ["keyword", "page"]
-        fieldsToRemove.forEach(el=> delete QueryStrCopy[el])
-
-        // Advance filter for price, ratings etc to add "$" sing
-        QueryStrCopy = JSON.stringify(QueryStrCopy);
-        QueryStrCopy = QueryStrCopy.replace(/\b(gt|gte|lt|lte)\b/g, (match) => `$${match}`);
-        QueryStrCopy=JSON.parse(QueryStrCopy)
-        
-        this.QueryProductsModel=this.QueryProductsModel.find(QueryStrCopy)
-        
-        return this
-    }
-```
--> ProductsCon.js
-```javascript
-export const FindProduct=catchAsyncError(async(req,res)=>{
-    //Reminder: filters() working over the fetch data and search() working over the database
-    let useForFilter=new ProductsFilter(ProductsModel,req.query).search().filters()
-
-    //If no pagination
-    let Products = await useForFilter.QueryProductsModel
-
-    res.status(200).json(
-        {
-            Total:Products.length,
-            Data:Products,
-            message:"Success"
-        }
-    )
+    this.password=await bcrypt.hash(this.password, 12)
 })
 ```
-## Search + Filter + Pagination
-
-Utils>ProductsFilter.js
+## Login + Jwt token + Send token as cookie
+Controller>UserCon.js
+Always use find one while finding single info to avoid [] arry return
 ```javascript
-class ProductsFilter {
-    constructor(QueryProductsModel, QueryStr) {
-      this.QueryProductsModel = QueryProductsModel;
-      this.QueryStr = QueryStr;
+export const LoginUser=catchAsyncError(async(req,res,next)=>{
+    const {email, password}=req.body
+    if(!email || !password){
+        return next(new ErrorHandle("Please enter you email and password."))
     }
-  
-    search() {
-        
-        const keyword=this.QueryStr.keyword? {name:{$regex:this.QueryStr.keyword, $options:"i"}}:{}
-        this.QueryProductsModel=this.QueryProductsModel.find({...keyword})
-        
-        return this
-    }
-    filters() {
 
-        //Remove Search keyword and page value while filter
-        let QueryStrCopy={...this.QueryStr}
-        const fieldsToRemove = ["keyword", "page"]
-        fieldsToRemove.forEach(el=> delete QueryStrCopy[el])
+    //Always use find one while finding single info to avoid [] arry return
+    const info=await UserModel.findOne({email}).select("+password")
 
-        // Advance filter for price, ratings etc
-        QueryStrCopy = JSON.stringify(QueryStrCopy);
-        //if no filter value still it will not occure any side effect
-        QueryStrCopy = QueryStrCopy.replace(/\b(gt|gte|lt|lte)\b/g, (match) => `$${match}`);        
-        QueryStrCopy=JSON.parse(QueryStrCopy)
-        
-        this.QueryProductsModel=this.QueryProductsModel.find(QueryStrCopy)
-        
-        return this
+    if(!info){
+        return next(new ErrorHandle("Please insert correct email."))
     }
-    pagination(numOfItems){
-        const whichPage=Number(this.QueryStr.page) || 1
-        
-        const showItemsNum=numOfItems*(whichPage-1)
-        this.QueryProductsModel=this.QueryProductsModel.limit(numOfItems).skip(showItemsNum)
+    const isPasswordMatched = await info.comparePassword(password)
+    if(!isPasswordMatched){
+        return next(new ErrorHandle("Please insert correct password.",400))
+    }
+    const token=info.getJwtToken()
 
-        return this
+    const options={
+        expires:new Date(Date.now()+process.env.COOKIE_EXPIRE*24*60*60*1000),
+        httpOnly:true
     }
+    res.status(200).cookie("token",token,options).json({
+        token:token,
+        data:info,
+        message:"Success"
+    })
+})
+```
+
+Model > UserModel.js
+
+
+Password compare method declear within Model (When using find one it the response data will contain this method funtion as well)
+```javascript
+//Check is password is right
+UserModel.methods.comparePassword = async function (enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
+  };
+```
+
+
+Jwt Token method declear within Model (When using find one it the response data will contain this method funtion as well)
+```javascript
+//jwt token
+UserModel.methods.getJwtToken=function(){
+    return jwt.sign({id:this._id}, process.env.JWT_SECRET_KEY, {expiresIn:process.env.JWT_EXPIRE})
 }
-
-export default ProductsFilter
 ```
--> ProductsCon.js
+Cookie parser use for get token from frontend request
+->app.js
+
 ```javascript
-export const FindProduct=catchAsyncError(async(req,res)=>{
-    //Reminder: filters() working over the fetch data and search() working over the database
-    let useForFilter=new ProductsFilter(ProductsModel,req.query).search().filters()
+import cookieParser from 'cookie-parser';
+app.use(cookieParser())
+```
 
-    // If no pagination
-    // let Products = await useForFilter.QueryProductsModel
+## Midleware > is user Authenticated
 
-    //If pagination
-    const numOfItems=4
-    useForFilter.pagination(numOfItems)
-    let Products=await useForFilter.QueryProductsModel
-    
-    res.status(200).json(
-        {
-            Total:Products.length,
-            Data:Products,
-            message:"Success"
+(to check is the request is logged in?)
+Midleware>isUserAuthenticated.js
+
+```javascript
+
+import UserModel from '../Model/UserModel.js';
+import catchAsyncError from '../Utils/catchAsyncError.js';
+import ErrorHandle from '../Utils/ErrorHandle.js';
+import jwt from "jsonwebtoken"
+const isUserAuthenticated=catchAsyncError(
+    async(req,res,next)=>{
+
+        const {token}  = req.cookies;
+        if(!token){
+            return next(new ErrorHandle("Please login.", 401))
         }
-    )
-})
+        const Decoded=jwt.verify(token, process.env.JWT_SECRET_KEY)
+        req.user= await UserModel.findById(Decoded.id)
+
+        return next()
+    }
+)
+
+export default isUserAuthenticated
 ```
