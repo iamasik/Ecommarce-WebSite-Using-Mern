@@ -1,5 +1,5 @@
 import express from 'express';
-import ErrorMessage from './Midleware/error.js';
+import ErrorMessage from './Midleware/Error.js'
 import cookieParser from 'cookie-parser';
 const app=express()
 // To parse json request
@@ -26,6 +26,7 @@ DabaseConnect()
 //Use Product Router
 import ProductRoute from './Route/Products.js'
 app.use("/Api/V1", ProductRoute)
+
 //Use User Router
 import UserRoute from './Route/Users.js';
 app.use("/Api/V1",UserRoute)

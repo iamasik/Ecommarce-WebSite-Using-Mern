@@ -1,6 +1,58 @@
 import UserModel from "../Model/UserModel.js"
 import ErrorHandle from "../Utils/ErrorHandle.js"
 import catchAsyncError from "../Utils/catchAsyncError.js"
+import Template from "../Utils/Template.js"
+import sendEmail from "../Utils/sendMail.js"
+import crypto from 'crypto'
+
+export const ForgetPassword=catchAsyncError(async(req,res,next)=>{
+    const user= await UserModel.findOne(req.body)
+    if(!user){
+        return next(new ErrorHandle("User not found", 401))
+    }
+    const URL=`${process.env.DOMAIN}/Api/V1/SetPassword/${user.ResetToken()}`
+    await user.save()
+    const Options={
+        email:user.email,
+        subject:"Reset your password",
+        message:Template(user.name,URL)
+    }
+    
+    try{
+        await sendEmail(Options)
+    }catch(err){
+        return next(new ErrorHandle("Password Reset failed.",403))
+    }
+    res.status(200).json({
+        message:"Password reset message sent."
+    })
+
+})
+
+export const ResetPassword=catchAsyncError(async(req,res,next)=>{
+    const resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+    const user=await UserModel.findOne({resetPasswordToken,resetPasswordExpire: {$gte:Date.now()}})
+
+    if(!user){
+        return next(new ErrorHandle("User not found", 401))
+    }
+
+    user.password=req.body.password
+    user.resetPasswordToken=undefined
+    user.resetPasswordExpire=undefined
+
+    user.save()
+    
+    res.status(200).json({
+        message:"Password changed."
+    })
+
+})
+
 
 export const AddUser=catchAsyncError(async(req,res,next)=>{
     const {name, email, password }=req.body
@@ -23,7 +75,6 @@ export const LoginUser=catchAsyncError(async(req,res,next)=>{
 
     //Always use find one while finding single info to aboid [] arry return
     const info=await UserModel.findOne({email}).select("+password")
-
     if(!info){
         return next(new ErrorHandle("Please insert correct email."))
     }

@@ -1,119 +1,127 @@
 
-# Authentication | Password Hashing | JWT Token | Cookie
+# Send reset mail | Reset token using crypto | Reset Password | Jwt and duplicate error handle
 
-## Singup and Password hasing using bcrypt
+## Send reset mail
 
+install nodemailer. for this I use mailtrap SMTP
+
+
+Utils>sendMail.js
+
+```javascript
+import nodemailer from 'nodemailer'
+import catchAsyncError from './catchAsyncError.js';
+const sendEmail =catchAsyncError( async (options) => {
+    const transport = nodemailer.createTransport({
+      host: process.env.MAIL_TRAP_HOST,
+      port: 25,
+      auth: {
+        user: process.env.MAIL_TRAP_USER,
+        pass: process.env.MAIL_TRAP_PASS
+      }
+    })
+    const message = {
+      from: `${process.env.MAIL_TRAP_NAME} <${process.env.MAIL_TRAP_EMAIL}>`,
+      to: options.email,
+      subject: options.subject,
+      html: options.message
+    };
+
+    await transport.sendMail(message);
+  })
+
+  export default sendEmail
+```
 Controller>UserCon.js
 
 ```javascript
-export const AddUser=catchAsyncError(async(req,res,next)=>{
-    const {name, email, password }=req.body
-    const info=await UserModel.create({name, email, password})
-    
-    if(!info){
-        return next(new ErrorHandle("Something is wrong.", 400))
+export const ForgetPassword=catchAsyncError(async(req,res,next)=>{
+    const user= await UserModel.findOne(req.body)
+    if(!user){
+        return next(new ErrorHandle("User not found", 401))
     }
-
-    res.status(201).json({
-        message:"Sucess"
+    const URL=`${process.env.DOMAIN}/Api/V1/SetPassword/${user.ResetToken()}`
+    await user.save()
+    const Options={
+        email:user.email,
+        subject:"Reset your password",
+        message:Template(user.name,URL)
+    }
+    
+    try{
+        await sendEmail(Options)
+    }catch(err){
+        return next(new ErrorHandle("Password Reset failed.",403))
+    }
+    res.status(200).json({
+        message:"Password reset message sent."
     })
+
 })
 ```
+
+Make sure I have all environment variable
+```javascript
+MAIL_TRAP_PORT=2525
+MAIL_TRAP_HOST=sandbox.smtp.mailtrap.io
+MAIL_TRAP_USER=
+MAIL_TRAP_PASS=
+MAIL_TRAP_NAME=EcomShop
+MAIL_TRAP_EMAIL=contact@Ecom.com
+DOMAIN=http://127.0.0.1:8080
+```
+
+## Reset token using crypto
 Model>UserModel.js
 
 ```javascript
-UserModel.pre("save", async function(next){
-    if(!this.isModified("password")){
-        next()
-    }
-    this.password=await bcrypt.hash(this.password, 12)
-})
+// Reset Password One time token 
+UserModel.methods.ResetToken=function(){
+    const Token=crypto.randomBytes(20).toString("hex")
+    this.resetPasswordToken=crypto.createHash("sha256").update(Token).digest("hex")
+    this.resetPasswordExpire=Date.now()+30*60*1000
+    return Token
+}
 ```
-## Login + Jwt token + Send token as cookie
-Controller>UserCon.js
-Always use find one while finding single info to avoid [] arry return
+
+## Need to setup a HTML email template
+Template.js
+
+
+## Reset Password
+
 ```javascript
-export const LoginUser=catchAsyncError(async(req,res,next)=>{
-    const {email, password}=req.body
-    if(!email || !password){
-        return next(new ErrorHandle("Please enter you email and password."))
+export const ResetPassword=catchAsyncError(async(req,res,next)=>{
+    const resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+    const user=await UserModel.findOne({resetPasswordToken,resetPasswordExpire: {$gte:Date.now()}})
+    if(!user){
+        return next(new ErrorHandle("User not found", 401))
     }
-
-    //Always use find one while finding single info to avoid [] arry return
-    const info=await UserModel.findOne({email}).select("+password")
-
-    if(!info){
-        return next(new ErrorHandle("Please insert correct email."))
-    }
-    const isPasswordMatched = await info.comparePassword(password)
-    if(!isPasswordMatched){
-        return next(new ErrorHandle("Please insert correct password.",400))
-    }
-    const token=info.getJwtToken()
-
-    const options={
-        expires:new Date(Date.now()+process.env.COOKIE_EXPIRE*24*60*60*1000),
-        httpOnly:true
-    }
-    res.status(200).cookie("token",token,options).json({
-        token:token,
-        data:info,
-        message:"Success"
+    user.password=req.body.password
+    user.resetPasswordToken=undefined
+    user.resetPasswordExpire=undefined
+    user.save()
+    res.status(200).json({
+        message:"Password changed."
     })
 })
 ```
 
-Model > UserModel.js
+## Jwt and duplicate error handle
 
-
-Password compare method declear within Model (When using find one it the response data will contain this method funtion as well)
-```javascript
-//Check is password is right
-UserModel.methods.comparePassword = async function (enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
-  };
-```
-
-
-Jwt Token method declear within Model (When using find one it the response data will contain this method funtion as well)
-```javascript
-//jwt token
-UserModel.methods.getJwtToken=function(){
-    return jwt.sign({id:this._id}, process.env.JWT_SECRET_KEY, {expiresIn:process.env.JWT_EXPIRE})
-}
-```
-Cookie parser use for get token from frontend request
-->app.js
+Midleware>Error.js
 
 ```javascript
-import cookieParser from 'cookie-parser';
-app.use(cookieParser())
-```
+   // JWT Token Expired Error
+    if (err.name === "TokenExpiredError") {
+        error = new ErrorHandle("Your token time has been expired. Please login again.", 400);
+      }
 
-## Midleware > is user Authenticated
-
-(to check is the request is logged in?)
-Midleware>isUserAuthenticated.js
-
-```javascript
-
-import UserModel from '../Model/UserModel.js';
-import catchAsyncError from '../Utils/catchAsyncError.js';
-import ErrorHandle from '../Utils/ErrorHandle.js';
-import jwt from "jsonwebtoken"
-const isUserAuthenticated=catchAsyncError(
-    async(req,res,next)=>{
-
-        const {token}  = req.cookies;
-        if(!token){
-            return next(new ErrorHandle("Please login.", 401))
-        }
-        const Decoded=jwt.verify(token, process.env.JWT_SECRET_KEY)
-        req.user= await UserModel.findById(Decoded.id)
-
-        return next()
-    }
-)
-
-export default isUserAuthenticated
+    // Duplicate error handle
+    if (err.code === 11000) {
+        error = new ErrorHandle(`This ${err?.keyValue?.email} is already registered`, 400);
+      }
 ```

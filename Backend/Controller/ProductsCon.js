@@ -37,6 +37,7 @@ export const ViewProducts=catchAsyncError(
 )
 export const AddProducts=catchAsyncError(
     async (req,res, next)=>{
+        req.body.user=req.user._id
         const Products=await ProductsModel.create(req.body)
         if(!Products){
             return next(new ErrorHandle("Product Add failed", 400))

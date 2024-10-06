@@ -11,6 +11,7 @@ const isUserAuthenticated=catchAsyncError(
             return next(new ErrorHandle("Please login.", 401))
         }
         const Decoded=jwt.verify(token, process.env.JWT_SECRET_KEY)
+        
         req.user= await UserModel.findById(Decoded.id)
 
         return next()

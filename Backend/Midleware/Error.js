@@ -18,6 +18,16 @@ const ErrorMessage=(err,req,res,next)=>{
         error = new ErrorHandle(message, 400);
       }
 
+    // JWT Token Expired Error
+    if (err.name === "TokenExpiredError") {
+        error = new ErrorHandle("Your token time has been expired. Please login again.", 400);
+      }
+
+    // Duplicate error handle
+    if (err.code === 11000) {
+        error = new ErrorHandle(`This ${err?.keyValue?.email} is already registered`, 400);
+      }
+
     if(process.env.NODE_ENV==="Development"){
         res.status(error.statusCode).json({
             message: error.message,
