@@ -1,5 +1,5 @@
 import express from 'express'
-export const ProductRoute=express.Router()
+const ProductRoute=express.Router()
 import {ViewProducts, AddProducts,DeleteProduct,ViewOneProduct,UpdateProduct, FindProduct} from '../Controller/ProductsCon.js'
 import isUserAuthenticated from '../Midleware/isUserAuthenticated.js'
 import userRole from '../Midleware/userRole.js'

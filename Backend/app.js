@@ -31,6 +31,9 @@ app.use("/Api/V1", ProductRoute)
 import UserRoute from './Route/Users.js';
 app.use("/Api/V1",UserRoute)
 
+//Use Order Route
+import OrderRoute from './Route/Orders.js';
+app.use("/Api/V1",OrderRoute)
 
 //Handing error and show message 
 app.use(ErrorMessage)
