@@ -1,144 +1,223 @@
 
-# User(Get User Info, Update Password)  | Admin (Get Any User Info, Get All User Info, Update Any User Info, Delete Any User)
+# Add new order, user view single and all orders, Admin view all orders, update orders, delete orders
 
 ## User - Get User Info
 
-Controller>UserCon.js
+Model>OrderModel.js
 
 ```javascript
-export const UserInfo=catchAsyncError(async(req,res,next)=>{
-    const user= await UserModel.findById(req.user._id)
+import mongoose from "mongoose";
+import UserModel from "./UserModel.js"
 
-    if(!user){
-        return next( new ErrorHandle("User info not found",400))
+const OrderModel=new mongoose.Schema({
+    shippingInfo:{
+        address: {
+            type: String,
+            required: true,
+          },
+          city: {
+            type: String,
+            required: true,
+          },
+          phoneNo: {
+            type: String,
+            required: true,
+          },
+          zipCode: {
+            type: String,
+            required: true,
+          },
+          country: {
+            type: String,
+            required: true,
+          }
+    },
+    user:{
+        type:mongoose.Schema.Types.ObjectId,
+        required:true,
+        ref: "UserModel"
+    },
+    orderItems: [
+        {
+          name: {
+            type: String,
+            required: true,
+          },
+          quantity: {
+            type: Number,
+            required: true,
+          },
+          image: {
+            type: String,
+            required: true,
+          },
+          price: {
+            type: String,
+            required: true,
+          },
+          product: {
+            type: mongoose.Schema.Types.ObjectId,
+            required: true,
+            ref: "Product",
+          },
+        },
+      ],
+    paymentMethod: {
+    type: String,
+    required: [true, "Please select payment method"],
+    enum: {
+        values: ["COD", "Card"],
+        message: "Please select: COD or Card",
+    },
+    },
+    paymentInfo: {
+    id: String,
+    status: String,
+    },
+    itemsPrice: {
+    type: Number,
+    required: true,
+    },
+    taxAmount: {
+    type: Number,
+    required: true,
+    },
+    shippingAmount: {
+    type: Number,
+    required: true,
+    },
+    totalAmount: {
+    type: Number,
+    required: true,
+    },
+    orderStatus: {
+        type: String,
+        enum: {
+          values: ["Processing", "Shipped", "Delivered"],
+          message: "Please select correct order status",
+        },
+        default: "Processing",
+      },
+      deliveredAt: Date,
+},{timestamps:true})
+
+export default mongoose.model("OrderModel",OrderModel)
+```
+Controller>OrderCon.js
+
+```javascript
+import catchAsyncError from '../Utils/catchAsyncError.js'
+import ErrorHandle from '../Utils/ErrorHandle.js'
+import OrderModel from '../Model/OrderModel.js'
+import ProductsModel from '../Model/ProductsModel.js'
+
+export const AddOrder=catchAsyncError(async(req,res,next)=>{
+    
+    const {shippingInfo, orderItems, paymentMethod, paymentInfo, itemsPrice, taxAmount, shippingAmount, totalAmount}=req.body
+
+    const Data= await OrderModel.create({
+        shippingInfo, orderItems, paymentMethod, paymentInfo, itemsPrice, taxAmount, shippingAmount, totalAmount, user:req.user._id
+    })
+
+    orderItems.forEach(async item=>{
+        const Product = await ProductsModel.findById(item.product)
+        if(Product){
+            Product.stock=Product.stock-item.quantity
+            await Product.save({validateBeforeSave:false})
+        }
+    })
+
+    if(!Data){
+        return next(new ErrorHandle("Something is wrong",400))
     }
-
-    res.status(200).json({
-        user
+    res.status(201).json({
+        message:"Success"
     })
 })
-```
-Controller>UserCon.js
-## User - Update Password
 
-Controller>UserCon.js
+export const GetSingleOrder=catchAsyncError(async(req,res,next)=>{
+    
+    const OrderInfo=await OrderModel.findById(req.params.id).populate('user','name email')
 
-```javascript
-
-export const UpdatePassword=catchAsyncError(async(req,res,next)=>{
-    const user= await UserModel.findById(req.user._id).select("+password")
-    const token=user.getJwtToken()
-
-    const options={
-        expires:new Date(Date.now()+process.env.COOKIE_EXPIRE*24*60*60*1000),
-        httpOnly:true
+    
+    if(OrderInfo.user.id!=req.user.id){
+        return next(new ErrorHandle("This order not belongs to you.",400))
     }
     
-    if(!user){
-        return next( new ErrorHandle("User info not found",400))
+    if(!OrderInfo){
+        return next(new ErrorHandle("Order not found",400))
     }
-    const isPasswordMatched=await user.comparePassword(req.body.oldpassword)
-    if(isPasswordMatched && token){
-        user.password=req.body.password
-        await user.save()
-    }
-    else{
-        return next(new ErrorHandle("Old password didn't match.",400))
-    }
-
-    res.status(200).cookie("token",token,options).json({
-        token:token,
-        message: "Success"
-    })
-})
-```
-Controller>UserCon.js
-
-## Admin - Get Any User Info
-
-Controller>UserCon.js
-
-```javascript
-export const GetAnyUserInfo=catchAsyncError(async(req,res,next)=>{
-    const user= await UserModel.findById(req.params.id)
-
-    if(!user){
-        return next( new ErrorHandle("User info not found",400))
-    }
-
     res.status(200).json({
-        user
-    })
-})
-```
-
-## Admin - Get All User Info
-
-Controller>UserCon.js
-
-```javascript
-export const AllUserInfo=catchAsyncError(async(req,res,next)=>{
-    const users= await UserModel.find()
-
-    if(!users){
-        return next( new ErrorHandle("No users info found",400))
-    }
-
-    res.status(200).json({
-        users
-    })
-})
-```
-
-## Admin - Update Any User Info
-
-Controller>UserCon.js
-
-```javascript
-export const UpdateAnyUserInfo=catchAsyncError(async(req,res,next)=>{
-    const user= await UserModel.findById(req.params.id)
-
-    if(!user){
-        return next( new ErrorHandle("User info not found",400))
-    }
-    user.name=req.body.name
-    user.email=req.body.email
-
-    await user.save()
-    res.status(200).json({
-        user,
+        OrderInfo,
         message:"Success"
     })
 })
-export const GetAnyUserInfo=catchAsyncError(async(req,res,next)=>{
-    const user= await UserModel.findById(req.params.id)
 
-    if(!user){
-        return next( new ErrorHandle("User info not found",400))
+export const MyAllOrders=catchAsyncError(async(req,res,next)=>{
+    
+    const Orders=await OrderModel.find({user:req.user._id})
+    
+    if(!Orders){
+        return next(new ErrorHandle("No orders found",400))
     }
-
     res.status(200).json({
-        user
+        Orders,
+        message:"Success"
     })
 })
-```
 
-## Admin - Delete Any User
-
-Controller>UserCon.js
-
-```javascript
-export const DeleteAnyUser=catchAsyncError(async(req,res,next)=>{
-
-    const info=await UserModel.findByIdAndDelete(req.params.id)
-
-    if(!info){
-        return next(new ErrorHandle("Delete Failed",400))
+//Admin
+export const AllOrders=catchAsyncError(async(req,res,next)=>{
+    
+    const Orders=await OrderModel.find()
+    
+    if(!Orders){
+        return next(new ErrorHandle("No orders found",400))
     }
+    res.status(200).json({
+        Orders,
+        message:"Success"
+    })
+})
+
+//Admin
+export const UpdateOrder=catchAsyncError(async(req,res,next)=>{
+    
+    const Orders=await OrderModel.findById(req.params.id)
+    
+    if(!Orders){
+        return next(new ErrorHandle("No order found",400))
+    }
+    Orders.orderStatus=req.body.orderStatus
+    Orders.deliveredAt=Date.now()
+    Orders.save({validateBeforeSave:false})
+
+    res.status(200).json({
+        Orders,
+        message:"Success"
+    })
+})
+
+//Admin
+export const DeleteOrder=catchAsyncError(async(req,res,next)=>{
+    
+    const Order=await OrderModel.findByIdAndDelete(req.params.id)
+    
+    if(!Order){
+        return next(new ErrorHandle("No order found",400))
+    }
+    Order.orderItems.forEach(async item=>{
+        const Product = await ProductsModel.findById(item.product)
+        if(Product){
+            Product.stock=Product.stock+item.quantity
+            await Product.save({validateBeforeSave:false})
+        }
+    })
 
     res.status(200).json({
         message:"Success"
     })
 })
+
 
 ```
