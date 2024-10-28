@@ -11,7 +11,7 @@ export const FindProduct=catchAsyncError(async(req,res,next)=>{
     // let Products = await useForFilter.QueryProductsModel
 
     //If pagination
-    const numOfItems=4
+    const numOfItems=8
     useForFilter.pagination(numOfItems)
     let Products=await useForFilter.QueryProductsModel
     
@@ -76,5 +76,76 @@ export const UpdateProduct=catchAsyncError(async (req, res,next)=>{
     }
     res.status(201).json({
         Product
+    })
+})
+
+
+//Review
+export const NewReview=catchAsyncError(async(req,res,next)=>{
+    const {rating,comment, ProductId}=req.body
+    
+    const reviews={
+        user:req.user.id,
+        rating,
+        comment
+    }
+
+    const Product=await ProductsModel.findById(ProductId)
+
+    if(!Product){
+        return next(new ErrorHandle("Product not found",400))
+    }
+
+    const isUserReviewd=Product?.reviews?.find(r=>r.user.toString()===req.user.id)
+    console.log(isUserReviewd);
+    
+
+    if(isUserReviewd){
+        Product.reviews=Product.reviews.map(item => item.user.toString()===req.user._id.toString()? {...item, rating, comment}: item)
+    }else{
+        Product.reviews.push(reviews)
+    }
+
+    Product.numOfReviews=Product.reviews.length
+
+    if(Product.numOfReviews!=0){
+
+        Product.ratings=Product.reviews.reduce((accumulator, currentValue) => {
+                    return accumulator + currentValue.rating;
+        }, 0)/Product.numOfReviews
+    }
+    await Product.save({validateBeforeSave:false})
+
+
+    res.status(201).json({
+        message:"Success"
+    })
+})
+
+//Review Delete
+export const ReviewDelete=catchAsyncError(async(req,res,next)=>{
+    const ProductId=req.query.ProductId
+    const Product=await ProductsModel.findById(ProductId)
+
+    if(!Product){
+        return next(new ErrorHandle("Product not found",400))
+    }
+
+    Product.reviews=Product.reviews.filter(item=>item.user.toString()!=req.user._id.toString())
+    Product.numOfReviews=Product.reviews.length
+    if(Product.numOfReviews!=0){
+
+        Product.ratings=Product.reviews.reduce((accumulator, currentValue) => {
+                    return accumulator + currentValue.rating;
+        }, 0)/Product.numOfReviews
+    }else{
+        Product.ratings=0
+    }
+
+    await Product.save({validateBeforeSave:false})
+
+
+    res.status(200).json({
+        message:"Success"
     })
 })
